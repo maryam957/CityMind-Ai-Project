@@ -1,1 +1,0 @@
-"""CityMind challenge modules package."""

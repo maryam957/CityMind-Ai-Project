@@ -25,8 +25,11 @@ All modules are integrated through `modules/graph_manager.py` and orchestrated b
 
 ```bash
 pip install -r requirements.txt
+npm install
 python main.py
 ```
+
+`python main.py` now launches the React/JSX frontend in the browser.
 
 ## Demo Flow
 

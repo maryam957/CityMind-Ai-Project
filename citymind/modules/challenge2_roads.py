@@ -51,7 +51,7 @@ class RoadOptimizer:
     def ensure_redundant_hospital_depot_path(self) -> None:
         lookup = self.graph.node_type_lookup()
         hospital = lookup.get("hospital")
-        depot = lookup.get("depot")
+        depot = lookup.get("ambulance_depot") or lookup.get("depot")
         if hospital is None or depot is None:
             return
 

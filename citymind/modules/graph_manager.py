@@ -84,7 +84,11 @@ class GraphManager:
         dest_node = self.nodes[destination]
         if edge.blocked or not dest_node.accessible:
             return float("inf")
-        return edge.base_cost * edge.dynamic_multiplier * (1.0 + dest_node.base_risk)
+        residential_factor = 0.8 if (
+            self.nodes[source].node_type == "residential"
+            or dest_node.node_type == "residential"
+        ) else 1.0
+        return edge.base_cost * edge.dynamic_multiplier * residential_factor
 
     def iter_unique_edges(self) -> List[Edge]:
         seen: Set[frozenset] = set()
@@ -108,7 +112,10 @@ class GraphManager:
     def node_type_lookup(self) -> Dict[str, Optional[NodeId]]:
         lookup: Dict[str, Optional[NodeId]] = {
             "hospital": None,
+            "ambulance_depot": None,
             "depot": None,
+            "power_plant": None,
+            "power": None,
         }
         for node in self.nodes.values():
             if node.node_type in lookup and lookup[node.node_type] is None:

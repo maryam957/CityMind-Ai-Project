@@ -34,7 +34,7 @@ class CrimeRiskModel:
             node_feat = np.array([
                 node.population,
                 1 if node.node_type == "industrial" else 0,
-                1 if node.node_type == "commercial" else 0,
+                1 if node.node_type == "school" else 0,
                 self._distance_to_power(node_id),
             ]).reshape(1, -1)
             cluster = self.kmeans.predict(node_feat)
@@ -53,25 +53,25 @@ class CrimeRiskModel:
         for _ in range(samples):
             population = self.random.randint(50, 1000)
             industrial = self.random.randint(0, 1)
-            commercial = self.random.randint(0, 1)
+            school = self.random.randint(0, 1)
             dist_power = self.random.randint(0, 8)
 
             raw = (
                 0.0025 * population
                 + 1.8 * industrial
-                + 0.8 * commercial
+                + 0.8 * school
                 - 0.15 * dist_power
                 + self.random.uniform(-0.8, 0.8)
             )
             label = 1 if raw > 2.5 else 0
 
-            data.append([population, industrial, commercial, dist_power])
+            data.append([population, industrial, school, dist_power])
             labels.append(label)
 
         return np.array(data, dtype=float), np.array(labels, dtype=int)
 
     def _distance_to_power(self, node_id: NodeId) -> int:
-        power_nodes = [n.node_id for n in self.graph.nodes.values() if n.node_type == "power"]
+        power_nodes = [n.node_id for n in self.graph.nodes.values() if n.node_type == "power_plant"]
         if not power_nodes:
             return 0
         return min(abs(node_id[0] - p[0]) + abs(node_id[1] - p[1]) for p in power_nodes)

@@ -54,6 +54,9 @@ class CityMindApp:
         self.stats_var = tk.StringVar(value="")
         ttk.Label(left, textvariable=self.stats_var, justify="left").pack(anchor="w")
 
+        ttk.Label(left, text="Node Legend", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(12, 6))
+        self._build_legend(left)
+
         canvas_w = self.sim.cols * CELL_SIZE + 1
         canvas_h = self.sim.rows * CELL_SIZE + 1
         self.canvas = tk.Canvas(center, width=canvas_w, height=canvas_h, bg="#f5f7fb", highlightthickness=0)
@@ -122,6 +125,8 @@ class CityMindApp:
             self._paint_cell(node_id, color)
 
     def _draw_cells(self) -> None:
+        active_ambulance = self.sim.ambulance_positions[0] if self.sim.ambulance_positions else None
+
         for node_id, node in self.sim.graph.nodes.items():
             r, c = node_id
             x1 = c * CELL_SIZE
@@ -132,12 +137,18 @@ class CityMindApp:
             self.canvas.create_rectangle(x1, y1, x2, y2, outline="#2b2d42", width=1)
 
             marker_color = self._node_color(node.node_type)
+            if node_id in self.sim.ambulance_positions:
+                marker_color = "#ffbe0b"
             cx, cy = self._cell_center(node_id)
             self.canvas.create_oval(cx - 8, cy - 8, cx + 8, cy + 8, fill=marker_color, outline="")
 
-        for amb in self.sim.ambulance_positions:
+        for index, amb in enumerate(self.sim.ambulance_positions):
             cx, cy = self._cell_center(amb)
-            self.canvas.create_text(cx, cy - 18, text="A", fill="#1d3557", font=("Segoe UI", 10, "bold"))
+            if active_ambulance is not None and amb == active_ambulance:
+                self.canvas.create_text(cx, cy - 20, text="AMB", fill="#ffbe0b", font=("Segoe UI", 9, "bold"))
+                self.canvas.create_oval(cx - 11, cy - 11, cx + 11, cy + 11, outline="#ffbe0b", width=2)
+            else:
+                self.canvas.create_text(cx, cy - 18, text="A", fill="#1d3557", font=("Segoe UI", 10, "bold"))
 
     def _draw_active_route(self) -> None:
         if len(self.sim.active_route) < 2:
@@ -164,6 +175,25 @@ class CityMindApp:
             f"Ambulances: {len(self.sim.ambulance_positions)}"
         )
 
+    def _build_legend(self, parent: ttk.Frame) -> None:
+        legend_items = [
+            ("Hospital", "#3a86ff"),
+            ("School", "#06d6a0"),
+            ("Industrial", "#495057"),
+            ("Residential", "#ef476f"),
+            ("Power Plant", "#8338ec"),
+            ("Ambulance Depot", "#ff8c42"),
+        ]
+        
+        for label, color in legend_items:
+            legend_frame = ttk.Frame(parent)
+            legend_frame.pack(anchor="w", pady=2)
+            
+            color_canvas = tk.Canvas(legend_frame, width=16, height=16, bg=color, highlightthickness=1, highlightbackground="#000")
+            color_canvas.pack(side="left", padx=(0, 8))
+            
+            ttk.Label(legend_frame, text=label, font=("Segoe UI", 9)).pack(side="left")
+
     def _paint_cell(self, node_id: NodeId, color: str) -> None:
         r, c = node_id
         x1 = c * CELL_SIZE
@@ -179,12 +209,11 @@ class CityMindApp:
     def _node_color(self, node_type: str) -> str:
         palette = {
             "hospital": "#3a86ff",
-            "depot": "#ffbe0b",
-            "power": "#8338ec",
+            "school": "#06d6a0",
             "industrial": "#495057",
-            "commercial": "#06d6a0",
             "residential": "#ef476f",
-            "park": "#52b788",
+            "power_plant": "#8338ec",
+            "ambulance_depot": "#ff8c42",
         }
         return palette.get(node_type, "#adb5bd")
 

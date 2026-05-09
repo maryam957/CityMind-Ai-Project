@@ -36,6 +36,7 @@ class CityMindSimulation:
         self.step_count = 0
         self.graph = GraphManager()
         self.graph.register_subscriber(self._on_graph_event)
+        self.router.graph = self.graph
 
         layout = self.layout_planner.generate_layout()
         self._build_graph_from_layout(layout)
@@ -59,11 +60,13 @@ class CityMindSimulation:
         self.logs.append(f"--- Simulation Step {self.step_count} ---")
 
         self._randomly_block_road()
+        self._advance_ambulance()
         self._recompute_route()
 
     def _build_graph_from_layout(self, layout: Dict[NodeId, str]) -> None:
         self.graph = GraphManager()
         self.graph.register_subscriber(self._on_graph_event)
+        self.router.graph = self.graph
 
         for node_id, node_type in layout.items():
             population = self.random.randint(80, 1000)
@@ -116,11 +119,28 @@ class CityMindSimulation:
         else:
             self.logs.append("Challenge 4 routing update failed due to blocked connectivity.")
 
+    def _advance_ambulance(self) -> None:
+        if len(self.ambulance_positions) == 0 or len(self.active_route) < 2:
+            return
+
+        current_position = self.ambulance_positions[0]
+        try:
+            route_index = self.active_route.index(current_position)
+        except ValueError:
+            route_index = 0
+
+        if route_index + 1 >= len(self.active_route):
+            return
+
+        next_position = self.active_route[route_index + 1]
+        self.ambulance_positions[0] = next_position
+        self.logs.append(f"Ambulance moved from {current_position} to {next_position}.")
+
     def _sample_civilians(self, count: int) -> List[NodeId]:
         candidates = [
             n.node_id
             for n in self.graph.nodes.values()
-            if n.node_type in {"residential", "commercial", "park"}
+            if n.node_type == "residential"
         ]
         if len(candidates) <= count:
             return candidates
