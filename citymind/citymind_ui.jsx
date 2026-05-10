@@ -417,7 +417,7 @@ export default function CityMindApp() {
       setRoute(rt);
       // civilians stay fixed — same targets, just rerouting around blocks
       addLog(rt.length>1
-        ? `🗺 A* re-routed: ${rt.length} nodes over ${civ.length} civilians.`
+        ? `🗺 A* re-routed: ${rt.length} nodes over ${civilians.length} civilians.`
         : "❌ Routing failed — all paths blocked.");
       return pos;
     });
