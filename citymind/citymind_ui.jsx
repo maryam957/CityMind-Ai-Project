@@ -281,12 +281,14 @@ function astar(start, goal, blockedEdges, risk) {
   return [];
 }
 
-function planRoute(start, layout, blockedEdges, risk, rng) {
+function planRoute(start, layout, blockedEdges, risk, rng, fixedCivilians=null) {
   const residentials=[];
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
     if(layout[`${r},${c}`]==="residential") residentials.push(`${r},${c}`);
-  const shuffled=[...residentials].sort(()=>rng()-0.5);
-  const civilians=shuffled.slice(0,5);
+  // Use fixedCivilians if provided (replanning keeps the same targets)
+  const civilians = fixedCivilians
+    ? fixedCivilians
+    : [...residentials].sort(()=>rng()-0.5).slice(0,5);
   if(!start||!civilians.length) return {path:[],civilians:[]};
 
   let current=start;
@@ -340,7 +342,8 @@ export default function CityMindApp() {
     const offs=deployOfficers(rlbl,lay,ns,10);
     const blocked=new Set();
     const startNode=ambs[0];
-    const {path:rt,civilians:civ}=planRoute(startNode,lay,blocked,rsk,rngRef.current);
+    const civRng = mulberry32(ns + 777); // dedicated RNG so civilians are always populated
+    const {path:rt,civilians:civ}=planRoute(startNode,lay,blocked,rsk,civRng);
 
     setLayout(lay);setRoads(r);setBlockedEdges(blocked);
     setAmbulances(ambs);setAmbulancePos(startNode);
@@ -410,8 +413,9 @@ export default function CityMindApp() {
 
     // 3. Recompute route from new position
     setAmbulancePos(pos=>{
-      const {path:rt,civilians:civ}=planRoute(pos,layout,newBlocked,risk,rngRef.current);
-      setRoute(rt);setCivilians(civ);
+      const {path:rt}=planRoute(pos,layout,newBlocked,risk,rngRef.current,civilians);
+      setRoute(rt);
+      // civilians stay fixed — same targets, just rerouting around blocks
       addLog(rt.length>1
         ? `🗺 A* re-routed: ${rt.length} nodes over ${civ.length} civilians.`
         : "❌ Routing failed — all paths blocked.");
@@ -627,21 +631,34 @@ export default function CityMindApp() {
                 );
               })}
 
-              {/* Civilian targets */}
+              {/* Civilian targets — large visible person icons */}
               {civilians.map((key,i)=>{
                 if(!key) return null;
                 const [cx,cy]=cellCenter(key);
                 const rescued=rescuedCivilians.has(key);
                 return (
                   <g key={`civ-${i}`}>
-                    <circle cx={cx+12} cy={cy-12} r={7}
-                      fill={rescued?"#34d399":"#f43f5e"}
-                      stroke={rescued?"#bbf7d0":"#fecdd3"}
-                      strokeWidth={rescued?2:1.5}
-                      strokeDasharray={rescued?"none":"3 2"}
-                    />
-                    <text x={cx+12} y={cy-8} textAnchor="middle" fontSize={8} fill="#fff" style={{userSelect:"none"}}>
-                      {rescued?"✓":"!"}
+                    {/* Pulsing outer ring */}
+                    {!rescued&&(
+                      <circle cx={cx} cy={cy} r={20} fill="none"
+                        stroke="#f43f5e" strokeWidth={2} opacity={0.5}
+                        strokeDasharray="4 3"/>
+                    )}
+                    {/* Filled background circle */}
+                    <circle cx={cx} cy={cy} r={13}
+                      fill={rescued?"#064e3b":"#4c0519"}
+                      stroke={rescued?"#34d399":"#f43f5e"}
+                      strokeWidth={2}/>
+                    {/* Person emoji */}
+                    <text x={cx} y={cy+5} textAnchor="middle" fontSize={14}
+                      style={{userSelect:"none"}}>
+                      {rescued?"✅":"🧍"}
+                    </text>
+                    {/* Number label */}
+                    <text x={cx+16} y={cy-14} textAnchor="middle" fontSize={10}
+                      fill={rescued?"#34d399":"#f43f5e"} fontWeight="bold"
+                      style={{userSelect:"none"}}>
+                      {i+1}
                     </text>
                   </g>
                 );
