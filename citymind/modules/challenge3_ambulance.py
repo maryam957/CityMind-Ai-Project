@@ -44,7 +44,16 @@ class AmbulancePlacer:
             population = next_population
 
         best = min(population, key=self._fitness)
-        return list(best)
+        # Ensure returned locations are unique and equal to ambulance_count.
+        out = list(dict.fromkeys(best))
+        # Fill with additional residential nodes if mutation/crossover produced duplicates
+        if len(out) < self.ambulance_count:
+            for node in self.graph.nodes:
+                if node not in out:
+                    out.append(node)
+                if len(out) == self.ambulance_count:
+                    break
+        return out
 
     def _random_candidate(self, nodes: Sequence[NodeId]) -> Tuple[NodeId, ...]:
         return tuple(self.random.sample(list(nodes), self.ambulance_count))

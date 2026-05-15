@@ -26,7 +26,11 @@ class CityMindApp:
         self._refresh_all()
 
     def _build_layout(self) -> None:
+        # Keep left and right panels a fixed minimum width so the center
+        # canvas doesn't shift when the log grows; center column is flexible.
+        self.root.columnconfigure(0, minsize=220)
         self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(2, minsize=380)
         self.root.rowconfigure(0, weight=1)
 
         left = ttk.Frame(self.root, padding=12)
@@ -63,8 +67,9 @@ class CityMindApp:
         self.canvas.grid(row=0, column=0, sticky="nsew")
 
         ttk.Label(right, text="Live Event Log", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 10))
+        # Fix the listbox size so adding log lines doesn't resize the layout
         self.log_box = tk.Listbox(right, width=58, height=45)
-        self.log_box.pack(fill="both", expand=True)
+        self.log_box.pack(fill="y", expand=False)
 
     def _regenerate(self) -> None:
         self.sim.initialize()
@@ -142,6 +147,17 @@ class CityMindApp:
             cx, cy = self._cell_center(node_id)
             self.canvas.create_oval(cx - 8, cy - 8, cx + 8, cy + 8, fill=marker_color, outline="")
 
+        # Draw assigned civilians for each ambulance with color-coding and labels
+        amb_colors = ["#ff006e", "#06d6a0", "#3a86ff", "#ffd166"]
+        for i, assigned in enumerate(getattr(self.sim, "assigned_civilians", [])):
+            color = amb_colors[i % len(amb_colors)]
+            for j, civ in enumerate(assigned):
+                ccx, ccy = self._cell_center(civ)
+                # small filled circle with a darker outline
+                self.canvas.create_oval(ccx - 6, ccy - 6, ccx + 6, ccy + 6, fill=color, outline="#5a5a5a")
+                # label civilian with ambulance index to show assignment (e.g., C0)
+                self.canvas.create_text(ccx, ccy + 12, text=f"C{i}", fill="#222", font=("Segoe UI", 7, "bold"))
+
         for index, amb in enumerate(self.sim.ambulance_positions):
             cx, cy = self._cell_center(amb)
             if active_ambulance is not None and amb == active_ambulance:
@@ -151,12 +167,18 @@ class CityMindApp:
                 self.canvas.create_text(cx, cy - 18, text="A", fill="#1d3557", font=("Segoe UI", 10, "bold"))
 
     def _draw_active_route(self) -> None:
-        if len(self.sim.active_route) < 2:
+        # `active_route` contains one route per ambulance.
+        if not self.sim.active_route:
             return
-        coords = []
-        for node in self.sim.active_route:
-            coords.extend(self._cell_center(node))
-        self.canvas.create_line(*coords, fill="#ff006e", width=3, dash=(6, 4))
+        colors = ["#ff006e", "#06d6a0", "#3a86ff", "#ffd166"]
+        for i, route in enumerate(self.sim.active_route):
+            if not route or len(route) < 2:
+                continue
+            coords = []
+            for node in route:
+                coords.extend(self._cell_center(node))
+            color = colors[i % len(colors)]
+            self.canvas.create_line(*coords, fill=color, width=3, dash=(6, 4))
 
     def _refresh_log(self) -> None:
         self.log_box.delete(0, tk.END)
@@ -219,3 +241,7 @@ class CityMindApp:
 
     def _manhattan(self, a: NodeId, b: NodeId) -> int:
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
+if __name__ == '__main__':
+    root = tk.Tk()
+    app = CityMindApp(root)
+    root.mainloop()

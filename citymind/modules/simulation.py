@@ -23,7 +23,10 @@ class CityMindSimulation:
     logs: List[str] = field(default_factory=list)
     step_count: int = 0
     ambulance_positions: List[NodeId] = field(default_factory=list)
-    active_route: List[NodeId] = field(default_factory=list)
+    # `active_route` now holds one route per ambulance (list of node lists)
+    active_route: List[List[NodeId]] = field(default_factory=list)
+    # Assigned civilians for each ambulance (parallel to `ambulance_positions`)
+    assigned_civilians: List[List[NodeId]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.random = random.Random(self.seed)
@@ -45,7 +48,18 @@ class CityMindSimulation:
         RoadOptimizer(self.graph).build_minimum_network()
         self.logs.append("Challenge 2 complete: MST roads with redundancy check prepared.")
 
-        self.ambulance_positions = AmbulancePlacer(self.graph).find_best_locations()
+        # Ensure ambulance positions are normalized to NodeId tuples and
+        # that we always have `ambulance_count` entries (fallback to extra
+        # residential nodes if GA returns fewer unique locations).
+        placer = AmbulancePlacer(self.graph)
+        ambs = list(placer.find_best_locations())
+        ambs = [tuple(a) for a in ambs]
+        # Fill with additional residential nodes if needed
+        if len(ambs) < placer.ambulance_count:
+            candidates = [n for n in self.graph.nodes.keys() if self.graph.nodes[n].node_type == "residential" and n not in ambs]
+            for extra in candidates[: max(0, placer.ambulance_count - len(ambs))]:
+                ambs.append(extra)
+        self.ambulance_positions = ambs
         self.logs.append(
             f"Challenge 3 complete: Ambulances placed at {self.ambulance_positions}."
         )
@@ -60,6 +74,7 @@ class CityMindSimulation:
         self.logs.append(f"--- Simulation Step {self.step_count} ---")
 
         self._randomly_block_road()
+        # Move each ambulance independently, then recompute per-ambulance routes.
         self._advance_ambulance()
         self._recompute_route()
 
@@ -104,37 +119,70 @@ class CityMindSimulation:
     def _recompute_route(self) -> None:
         if not self.ambulance_positions:
             self.logs.append("No ambulance positions available for routing.")
+            self.active_route = []
             return
 
         civilians = self._sample_civilians(count=5)
-        start = self.ambulance_positions[0]
-        route, route_log = self.router.plan_multi_stop_route(start, civilians)
-        self.active_route = route
-        self.logs.extend(route_log)
 
-        if len(route) > 1:
-            self.logs.append(
-                f"Challenge 4 routing updated: path length {len(route)} from {start} over {len(civilians)} civilians."
-            )
-        else:
-            self.logs.append("Challenge 4 routing update failed due to blocked connectivity.")
+        # Assign each civilian to the nearest ambulance by A* path cost
+        assignments: Dict[int, List[NodeId]] = {i: [] for i in range(len(self.ambulance_positions))}
+        for civ in civilians:
+            best_i = None
+            best_cost = float("inf")
+            for i, amb in enumerate(self.ambulance_positions):
+                path = self.router.astar(amb, civ)
+                if not path:
+                    continue
+                cost = self.router._path_cost(path)
+                if cost < best_cost:
+                    best_cost = cost
+                    best_i = i
+            if best_i is None:
+                # If unreachable from all, skip assignment
+                continue
+            assignments[best_i].append(civ)
+
+        # Plan per-ambulance routes
+        all_routes: List[List[NodeId]] = []
+        for i, amb in enumerate(self.ambulance_positions):
+            assigned = assignments.get(i, [])
+            if not assigned:
+                all_routes.append([amb])
+                continue
+            route, route_log = self.router.plan_multi_stop_route(amb, assigned)
+            all_routes.append(route)
+            self.logs.extend(route_log)
+
+        # Persist assignments and routes for UI/inspection
+        self.assigned_civilians = [assignments.get(i, []) for i in range(len(self.ambulance_positions))]
+        self.active_route = all_routes
+        total_stops = sum(len(r) for r in all_routes)
+        self.logs.append(
+            f"Challenge 4 routing updated: computed {len(all_routes)} routes covering {total_stops} nodes over {len(civilians)} civilians."
+        )
 
     def _advance_ambulance(self) -> None:
-        if len(self.ambulance_positions) == 0 or len(self.active_route) < 2:
+        # Advance each ambulance along its own route if possible
+        if len(self.ambulance_positions) == 0:
             return
 
-        current_position = self.ambulance_positions[0]
-        try:
-            route_index = self.active_route.index(current_position)
-        except ValueError:
-            route_index = 0
+        for i in range(len(self.ambulance_positions)):
+            route = self.active_route[i] if i < len(self.active_route) else [self.ambulance_positions[i]]
+            if len(route) < 2:
+                continue
+            current_position = self.ambulance_positions[i]
+            try:
+                route_index = route.index(current_position)
+            except ValueError:
+                # If ambulance not on its planned route, snap to route start
+                route_index = 0
 
-        if route_index + 1 >= len(self.active_route):
-            return
+            if route_index + 1 >= len(route):
+                continue
 
-        next_position = self.active_route[route_index + 1]
-        self.ambulance_positions[0] = next_position
-        self.logs.append(f"Ambulance moved from {current_position} to {next_position}.")
+            next_position = route[route_index + 1]
+            self.ambulance_positions[i] = next_position
+            self.logs.append(f"Ambulance {i} moved from {current_position} to {next_position}.")
 
     def _sample_civilians(self, count: int) -> List[NodeId]:
         candidates = [
